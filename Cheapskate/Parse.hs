@@ -85,6 +85,7 @@ data ContainerType = Document
                    | FencedCode { startColumn :: Int
                                 , fence :: Text
                                 , info :: Text }
+                   | DisplayMath
                    | IndentedCode
                    | RawHtmlBlock
                    | Reference
@@ -136,6 +137,7 @@ containerStart _lastLineIsText = scanNonindentSpace *>
 verbatimContainerStart :: Bool -> Parser ContainerType
 verbatimContainerStart lastLineIsText = scanNonindentSpace *>
    (  parseCodeFence
+  <|> parseDisplayMath
   <|> (guard (not lastLineIsText) *> (IndentedCode <$ char ' ' <* nfb scanBlankline))
   <|> (guard (not lastLineIsText) *> (RawHtmlBlock <$ parseHtmlBlockStart))
   <|> (guard (not lastLineIsText) *> (Reference <$ scanReference))
@@ -299,6 +301,13 @@ processElts refmap (C (Container ct cs) : rest) =
                   where txt = joinLines $ map extractText $ toList cs
                         attr = CodeAttr x (T.strip y)
                         (x,y) = T.break (==' ') info'
+    DisplayMath -> singleton (MathBlock $ (processMath refmap) (toList cs)) <>
+                   processElts refmap rest
+                where processMath refmap' (L _lineNumber lf : rest') = case lf of
+                        TextLine t -> processMathLine t <> processMath refmap' rest'
+                        BlankLine _ -> processMath refmap' rest'
+                        _ -> processMath refmap' rest
+                      processMath _ _ = mempty
 
     IndentedCode -> singleton (CodeBlock (CodeAttr "" "") txt)
                     <> processElts refmap rest'
@@ -382,6 +391,13 @@ processLine (lineNumber, txt) = do
          -- closing code fence
          then closeContainer
          else addLeaf lineNumber (TextLine t')
+    DisplayMath ->
+    -- here we don't check numUnmatched because we allow laziness
+      if "$$" `T.isPrefixOf` t'
+         -- closing display math
+         then closeContainer
+         else addLeaf lineNumber (TextLine t')
+
 
     -- otherwise, parse the remainder to see if we have new container starts:
     _ -> case tryNewContainers lastLineIsText (T.length txt - T.length t') t' of
@@ -523,6 +539,19 @@ parseCodeFence = do
   return $ FencedCode { startColumn = col
                       , fence = cs
                       , info = rawattr }
+
+
+-- Parse an initial code fence line, returning
+-- the fence part and the rest (after any spaces).
+parseDisplayMath :: Parser ContainerType
+parseDisplayMath = do
+  cs <- takeWhile1 (=='$')
+  guard $ T.length cs == 2
+  scanSpaces
+  takeWhile ('$' /=)
+  endOfInput
+  return $ DisplayMath
+
 
 -- Parse the start of an HTML block:  either an HTML tag or an
 -- HTML comment, with no indentation.

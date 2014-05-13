@@ -58,6 +58,7 @@ renderBlocks opts = mconcat . intersperse blocksep . map renderBlock . toList
           if allowRawHtml opts
              then H.preEscapedToMarkup raw
              else toHtml raw
+        renderBlock (MathBlock ils) = "$$\n" <> renderInlines opts ils <> "\n$$"
         li :: Bool -> Blocks -> Html  -- tight list handling
         li True = (<> nl) . H.li . mconcat . intersperse blocksep .
                       map renderBlockTight . toList
@@ -91,6 +92,7 @@ renderInlines opts = foldMap renderInline
           where base = H.img ! A.src (toValue' url)
                              ! A.alt (toValue
                                 $ BT.renderHtml $ renderInlines opts ils)
+        renderInline (InlineMath ils) = "$" <> renderInlines opts ils <> "$"
         renderInline (Entity t) = H.preEscapedToMarkup t
         renderInline (RawHtml t) =
           if allowRawHtml opts

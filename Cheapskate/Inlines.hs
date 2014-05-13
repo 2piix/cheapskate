@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Cheapskate.Inlines (
         parseInlines
+      , processMathLine
       , pHtmlTag
       , pReference
       , pLinkLabel)
@@ -148,6 +149,7 @@ pInline :: ReferenceMap -> Parser Inlines
 pInline refmap =
            pAsciiStr
        <|> pSpace
+       <|> pInlineMath refmap
        <|> pEnclosure '*' refmap  -- strong/emph
        <|> (notAfter isAlphaNum *> pEnclosure '_' refmap)
        <|> pCode
@@ -352,6 +354,23 @@ pInlineLink lab = do
   char ')'
   return $ singleton $ Link lab url tit
 
+pInlineMath :: ReferenceMap -> Parser Inlines
+pInlineMath refmap = do
+  cs <- takeWhile1 (== '$')
+  (Str cs <|) <$> pSpace
+              <|> case T.length cs of
+                       1  -> pDollar refmap mempty
+                       _  -> return (singleton $ Str cs)
+
+-- parse inlines til you hit a '$', and emit InlineMath.
+-- if you never hit a '$', emit '$' + inlines parsed.
+pDollar :: ReferenceMap -> Inlines -> Parser Inlines
+pDollar _refmap prefix = do
+  contents <- msum <$> many (nfbChar '$' >> pMathLine)
+  (char '$' >> return (single InlineMath $ prefix <> contents))
+    <|> return (singleton (Str (T.singleton '$')) <> (prefix <> contents))
+
+
 lookupLinkReference :: ReferenceMap
                     -> Text                -- reference label
                     -> Maybe (Text, Text)  -- (url, title)
@@ -437,4 +456,11 @@ emailLink :: Text -> Inlines
 emailLink t = singleton $ Link (singleton $ Str t)
                                ("mailto:" <> t) (T.empty)
 
+processMathLine :: Text -> Inlines
+processMathLine t =
+  case parse (msum <$> many pMathLine) t of
+       Left e   -> error ("processMathLines: " ++ show e) -- should not happen
+       Right r  -> r
 
+pMathLine :: Parser Inlines
+pMathLine = pAsciiStr <|> pSym

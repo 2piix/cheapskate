@@ -17,6 +17,7 @@ data Block = Para Inlines
            | Blockquote Blocks
            | List Bool ListType [Blocks]
            | CodeBlock CodeAttr Text
+           | MathBlock Inlines
            | HtmlBlock Text
            | HRule
            deriving (Show, Data, Typeable)
@@ -46,9 +47,11 @@ data Inline = Str Text
             | Code Text
             | Link Inlines Text {- URL -} Text {- title -}
             | Image Inlines Text {- URL -} Text {- title -}
+            | InlineMath Inlines
             | Entity Text
             | RawHtml Text
             deriving (Show, Data, Typeable)
+
 
 type Inlines = Seq Inline
 
