@@ -463,4 +463,4 @@ processMathLine t =
        Right r  -> r
 
 pMathLine :: Parser Inlines
-pMathLine = pAsciiStr <|> pSym
+pMathLine = pAsciiStr <|> (singleton . Str . T.singleton <$> anyChar)
